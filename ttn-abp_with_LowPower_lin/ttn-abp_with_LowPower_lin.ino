@@ -1,52 +1,25 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-#include <avr/interrupt.h>
-#include <avr/sleep.h>
-#include <avr/power.h>
-#include <avr/wdt.h>
 #include <DHT.h>
 #include <DHT_U.h>
 
-#define DHTPIN A0
+#define DHTPIN A2
 // DHT11 or DHT22
 #define DHTTYPE DHT11
-
 DHT dht(DHTPIN, DHTTYPE);
-volatile uint8_t f_wdt=1;
-ISR(WDT_vect)
-{
-  if(f_wdt == 0)
-  {
-    f_wdt=1; // Reset the Flag
-  }
-  else
-  {
-    Serial.println(F("WDT Overrun!!!"));
-  }
-}
-void enterSleep(void)
-{
-  WDTCSR |= _BV(WDIE); // Enable the WatchDog before we initiate sleep
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);    /* Even more Power Savings */
-  sleep_enable();
-  sleep_mode();
-  sleep_bod_disable();  // Additionally disable the Brown out detector
-  sleep_disable(); /* First thing to do is disable sleep. */
-  power_all_enable();
-}
-// LoRaWAN NwkSKey, network session key
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
-static const PROGMEM u1_t NWKSKEY[16] = { 0xC8, 0x85, 0xFC, 0xD0, 0x66, 0x56, 0x9E, 0x00, 0x1E, 0xE5, 0x08, 0x55, 0x6D, 0xEE, 0xFF, 0x80 };
 
+// LoRaWAN NwkSKey, network session key
+//Enter here your Network Session Key from the TTN device info (same order, i.e. msb)
+static const PROGMEM u1_t NWKSKEY[16] = { 0x14, 0x0A, 0xC8, 0x08, 0x01, 0x17, 0x7D, 0x6C, 0xE0, 0x48, 0x9B, 0x14, 0x76, 0x08, 0x05, 0xA3 };
 // LoRaWAN AppSKey, application session key
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
-static const u1_t PROGMEM APPSKEY[16] = { 0x51, 0x4B, 0x21, 0x81, 0x40, 0x3D, 0x38, 0x77, 0x22, 0x8B, 0x55, 0x6B, 0x28, 0xCC, 0xE4, 0x19 };
+//Enter here your App Session Key from the TTN device info (same order, i.e. msb)
+static const u1_t PROGMEM APPSKEY[16] = { 0x66, 0x1C, 0x36, 0x9B, 0x5A, 0xD5, 0x6D, 0xDE, 0xF8, 0x67, 0x10, 0x5A, 0xB9, 0x13, 0xD6, 0x83 };
 
 // LoRaWAN end-device address (DevAddr)
-static const u4_t DEVADDR = 0x26011DFB ; // <-- Change this address for every node!
+//Enter here your Device Address from the TTN device info (same order, i.e. msb)
+//example 0x12345678
+static const u4_t DEVADDR = 0x260118BB;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -55,20 +28,81 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-//static uint8_t mydata[] = "Hello, world!";
+//static uint8_t mydata[] = "Hello from LMIC";
 static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
 const unsigned TX_INTERVAL = 60;
 
+/*
+ *  C. Pham's ProMini PCB
+
+ 
 // Pin mapping
+ 
+const lmic_pinmap lmic_pins = {
+  .nss = 10,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 4,
+  .dio = {2, 3, LMIC_UNUSED_PIN},
+};
+*/
+
+/* Fabien Ferrero UCA breakout
+ *  
+ */
+ 
+// Pin mapping 
+
+const lmic_pinmap lmic_pins = {
+  .nss = 10,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 4,
+  .dio = {2, 3, LMIC_UNUSED_PIN},
+};
+
+/*
+ *  C. Hallard's ch2i Mini-Lora  
+
+ 
+// Pin mapping
+ 
+const lmic_pinmap lmic_pins = {
+  .nss = 10,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = A0,
+  .dio = {2, 7, 8},
+};
+*/
+
+/*
+ *  LORA Radio Node
+
+ 
+// Pin mapping
+ 
+const lmic_pinmap lmic_pins = {
+  .nss = 10,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 9,
+  .dio = {2, 3, 4},
+};
+*/
+
+/*
+ *  LORA Nexus by Ideetron
+
+ 
+// Pin mapping
+
 const lmic_pinmap lmic_pins = {
     .nss = 10,
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 5,
-    .dio = {2, 3, LMIC_UNUSED_PIN},
+    .rst = LMIC_UNUSED_PIN, // hardwired to AtMega RESET
+    .dio = {4, 5, 7},
 };
+*/
 
 void onEvent (ev_t ev) {
     Serial.print(os_getTime());
@@ -109,7 +143,12 @@ void onEvent (ev_t ev) {
               Serial.println(F("Received "));
               Serial.println(LMIC.dataLen);
               Serial.println(F(" bytes of payload"));
-              
+              for (int i = 0; i < LMIC.dataLen; i++) {
+              if (LMIC.frame[LMIC.dataBeg + i] < 0x10) {
+              Serial.print(F("0"));
+              }
+              Serial.print(LMIC.frame[LMIC.dataBeg + i], HEX);
+              }
             }
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
@@ -139,41 +178,32 @@ void onEvent (ev_t ev) {
 void do_send(osjob_t* j){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
-    Serial.println(F("OP_TXRXPEND, not sending"));
-   } else {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+    } else {
         // Prepare upstream data transmission at the next possible time.
+//        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
         uint32_t humidity = dht.readHumidity(false) * 100;
         uint32_t temperature = dht.readTemperature(false) * 100;
-        Serial.println("Humidity: " + String(humidity));
-        Serial.println("Temperature: " + String(temperature));
-        Serial.print(F("Freq="));
-        Serial.println(LMIC.freq);
         byte payload[4];
         payload[0] = highByte(humidity);
         payload[1] = lowByte(humidity);
         payload[2] = highByte(temperature);
         payload[3] = lowByte(temperature);
-        LMIC_setTxData2(1, (uint8_t*)payload, sizeof(payload)-1, 0);
+
+        LMIC_setTxData2(1, (byte*)payload, sizeof(payload)-1, 0);
+        Serial.println("Humidity: " + String(humidity));
+        Serial.println("Temperature: " + String(temperature));
         Serial.println(F("Packet queued"));
+        Serial.print(F("FREQ="));
+        Serial.println(LMIC.freq);       
     }
     // Next TX is scheduled after TX_COMPLETE event.
-   // os_runloop();
 }
 
 void setup() {
-    cli();
-    MCUSR &= ~(1<<WDRF);
-    WDTCSR |= (1<<WDCE) | (1<<WDE);
-    WDTCSR = 1<<WDP1 | 1<<WDP2;             /* 1.0 seconds */
-    sei();
-    pinMode(9, OUTPUT);
-    digitalWrite(9,LOW);
-    Serial.begin(9600);
-    Serial.println(F("Initialization complete."));
-    delay(10); //Allow for serial print to complete
-    Serial.begin(9600);
+    Serial.begin(38400);
     Serial.println(F("Starting"));
-    dht.begin();
+
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
     pinMode(VCC_ENABLE, OUTPUT);
@@ -185,6 +215,10 @@ void setup() {
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
+    
+    // Let LMIC compensate for +/- 10% clock error
+    // we take 10% error to better handle downlink messages
+    LMIC_setClockError(MAX_CLOCK_ERROR * 10 / 100);    
 
     // Set static session parameters. Instead of dynamically establishing a session
     // by joining the network, precomputed session parameters are be provided.
@@ -202,7 +236,20 @@ void setup() {
     LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
     #endif
 
-    #if defined(CFG_eu868)
+    #if defined(CFG_eu433)
+    //experimental only
+    // use RAK's 433 band https://github.com/RAKWireless/rak_common_for_gateway/blob/master/lora/rak2245/global_conf/global_conf.eu_433.json
+    LMIC_setupChannel(0, 433175000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(1, 433375000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
+    LMIC_setupChannel(2, 433575000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(3, 433975000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(4, 434175000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(5, 434375000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(6, 434575000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(7, 434775000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_setupChannel(8, 434675000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
+    
+    #elif defined(CFG_eu868)
     // Set up the channels used by the Things Network, which corresponds
     // to the defaults of most gateways. Without this, only three base
     // channels from the LoRaWAN specification are used, which certainly
@@ -212,6 +259,7 @@ void setup() {
     // Setting up channels should happen after LMIC_setSession, as that
     // configures the minimal channel set.
     // NA-US channels 0-71 are configured automatically
+    
     LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
     LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
@@ -221,6 +269,7 @@ void setup() {
     LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
+    
     // TTN defines an additional channel at 869.525Mhz using SF9 for class B
     // devices' ping slots. LMIC does not have an easy way to define set this
     // frequency and support for class B is spotty and untested, so this
@@ -232,34 +281,33 @@ void setup() {
     // https://github.com/TheThingsNetwork/gateway-conf/blob/master/US-global_conf.json
     LMIC_selectSubBand(1);
     #endif
-
+    
     // Disable link check validation
     LMIC_setLinkCheckMode(0);
-       
-    // TTN uses SF9 for its RX2 window.
-    LMIC.dn2Dr = DR_SF9;
 
+    //Seems that it is not true anymore    
+    // TTN uses SF9 for its RX2 window.
+    //LMIC.dn2Dr = DR_SF9;
+
+    //added by C. Pham
+    //uncomment to only have the first frequency when sending to our low-cost gateway
+    //Disable all channels, except for the 0 (868.1 in EU band)
+    //FOR TESTING ONLY!
+    
+    for (int i=1; i<9; i++) { // For EU; for US use i<71
+      if(i != 0) {
+        LMIC_disableChannel(i);
+      }
+    }
+    
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    LMIC_setDrTxpow(DR_SF7,14);
+    LMIC_setDrTxpow(DR_SF12,14);
 
     // Start job
     do_send(&sendjob);
-   // os_runloop();
+    dht.begin();
 }
 
 void loop() {
-  if(f_wdt == 1) {
-    digitalWrite(9,LOW);
-//    do_send(&sendjob);
     os_runloop_once();
-  }
-//   Serial.println();          // Line Separator
-   digitalWrite(9,HIGH);       // LED Indication OFF
-   delay(20); //Allow for serial print to complete.
-   f_wdt = 0;
-   enterSleep();
-//     os_runloop_once();
-//    do_send(&sendjob);
-    // Prepare upstream data transmission at the next possible time.
-    delay(30000);
 }
