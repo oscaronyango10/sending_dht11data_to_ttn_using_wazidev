@@ -11,7 +11,6 @@ const lmic_pinmap lmic_pins = {
   .rst = 4,
   .dio = {2, 3, LMIC_UNUSED_PIN},
 };
-i tried to use a library to make the board sleep for some time and the wakes up, so as to push data again but
-it didn't work.
+the code is now working well
 
 
