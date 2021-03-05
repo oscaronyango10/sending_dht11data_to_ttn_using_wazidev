@@ -53,7 +53,8 @@ const lmic_pinmap lmic_pins = {
  *  
  */
  
-// Pin mapping 
+// Pin mapping for the wazidev
+// Am using wazidev ver 1.3
 
 const lmic_pinmap lmic_pins = {
   .nss = 10,
