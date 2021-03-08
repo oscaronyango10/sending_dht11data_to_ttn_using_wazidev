@@ -12,8 +12,7 @@ const lmic_pinmap lmic_pins = {
   .dio = {2, 3, LMIC_UNUSED_PIN},
 };
 the code is now working well
-
--====================================sending data to Firebase from the things cloud====================================
+<<=========sending data to Firebase from the things cloud======================>>
 
 Go to Integrations -> add integration
 
